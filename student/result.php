@@ -43,6 +43,7 @@ $percentage = $total_questions > 0 ? round(($score / $total_questions) * 100, 2)
   </style>
 </head>
 <body>
+<?php require_once __DIR__ . '/../includes/navbar.php'; ?>
   <div class="wrap">
     <h1><?=htmlspecialchars($attempt['title'])?> Result</h1>
     <p class="score"><?=$score?> / <?=$total_questions?></p>

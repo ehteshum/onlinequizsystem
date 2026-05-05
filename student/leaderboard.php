@@ -32,6 +32,7 @@ $result = $mysqli->query($sql);
   </style>
 </head>
 <body>
+<?php require_once __DIR__ . '/../includes/navbar.php'; ?>
   <div class="wrap">
     <div class="top">
       <h2 style="margin:0">Leaderboard</h2>
