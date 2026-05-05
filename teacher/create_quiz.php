@@ -1,4 +1,5 @@
 <?php
+
 // teacher/create_quiz.php
 session_start();
 // Only teachers can access
@@ -7,6 +8,18 @@ if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'teacher') {
     exit;
 }
 require_once __DIR__ . '/../config/db.php';
+
+// Generate a non-empty quiz code using a mix of uniqid and random bytes.
+// Generate a non-empty quiz code that also fits the legacy `code` column length.
+// If random_bytes is unavailable for any reason, uniqid alone still keeps the code non-empty.
+function generate_quiz_code(): string
+{
+  try {
+    return 'QZ' . strtoupper(bin2hex(random_bytes(4))); // 10 characters total
+  } catch (Exception $e) {
+    return 'QZ' . strtoupper(substr(uniqid(), -8));
+  }
+}
 
 $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -22,14 +35,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($duration <= 0) $errors[] = 'Duration must be greater than 0 minutes.';
 
     if (empty($errors)) {
-        $stmt = $mysqli->prepare('INSERT INTO quizzes (title, created_by, duration) VALUES (?, ?, ?)');
-        $stmt->bind_param('sii', $title, $_SESSION['user_id'], $duration);
-        if ($stmt->execute()) {
+        // Generate a unique code and make sure it does not already exist.
+        // The loop prevents duplicates before inserting the quiz row.
+        $quiz_code = '';
+      $check_stmt = null;
+      $has_quiz_code = (bool)$mysqli->query("SHOW COLUMNS FROM quizzes LIKE 'quiz_code'")->num_rows;
+      $has_code = (bool)$mysqli->query("SHOW COLUMNS FROM quizzes LIKE 'code'")->num_rows;
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $quiz_code = generate_quiz_code();
+
+            if ($has_quiz_code) {
+              $check_stmt = $mysqli->prepare('SELECT id FROM quizzes WHERE quiz_code = ? LIMIT 1');
+            } elseif ($has_code) {
+              $check_stmt = $mysqli->prepare('SELECT id FROM quizzes WHERE code = ? LIMIT 1');
+            }
+
+            if ($check_stmt) {
+              $check_stmt->bind_param('s', $quiz_code);
+              $check_stmt->execute();
+              if ($check_stmt->get_result()->num_rows === 0) {
+                break;
+              }
+            } else {
+                break;
+            }
+
+            $quiz_code = '';
+        }
+
+        if ($quiz_code === '') {
+            $errors[] = 'Could not generate a unique quiz code. Please try again.';
+        } else {
+          // Insert the quiz code along with the quiz data.
+          // If the legacy `code` column exists, fill it too so the NOT NULL + UNIQUE
+          // constraint does not default to an empty string.
+          if ($has_quiz_code && $has_code) {
+            $stmt = $mysqli->prepare('INSERT INTO quizzes (quiz_code, code, title, created_by, duration) VALUES (?, ?, ?, ?, ?)');
+            $stmt->bind_param('sssii', $quiz_code, $quiz_code, $title, $_SESSION['user_id'], $duration);
+          } elseif ($has_quiz_code) {
+            $stmt = $mysqli->prepare('INSERT INTO quizzes (quiz_code, title, created_by, duration) VALUES (?, ?, ?, ?)');
+            $stmt->bind_param('ssii', $quiz_code, $title, $_SESSION['user_id'], $duration);
+          } elseif ($has_code) {
+            $stmt = $mysqli->prepare('INSERT INTO quizzes (code, title, created_by, duration) VALUES (?, ?, ?, ?)');
+            $stmt->bind_param('ssii', $quiz_code, $title, $_SESSION['user_id'], $duration);
+          } else {
+            $errors[] = 'Quiz code column is missing from the database.';
+            $stmt = null;
+          }
+
+          if ($stmt === null) {
+            // No insert possible without a code column.
+          } elseif ($stmt->execute()) {
             $new_quiz_id = $stmt->insert_id;
             header('Location: manage_questions.php?quiz_id=' . $new_quiz_id);
             exit;
-        } else {
-            $errors[] = 'Database error while creating quiz.';
+          } else {
+            $errors[] = 'Database error while creating quiz: ' . mysqli_error($mysqli);
+          }
         }
     }
 }
@@ -41,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Create Quiz</title>
   <style>
-    body{font-family:Arial, sans-serif;background:#f5f5f5}
+    body{font-family:Arial, sans-serif;background:#f5f5f5;margin:0}
     .wrap{width:420px;margin:60px auto;background:#fff;padding:20px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
     input{width:100%;padding:8px;margin:6px 0;border:1px solid #ccc;border-radius:4px}
     button{width:100%;padding:10px;background:#007bff;color:#fff;border:0;border-radius:4px}

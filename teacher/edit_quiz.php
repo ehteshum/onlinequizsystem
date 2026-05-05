@@ -44,6 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Database error while updating quiz.';
         }
     }
+  }
+
 // Calculate existing time for default display
 $existing_hours = floor($quiz['duration'] / 60);
 $existing_minutes = $quiz['duration'] % 60;
@@ -54,7 +56,7 @@ $existing_minutes = $quiz['duration'] % 60;
   <meta charset="utf-8">
   <title>Edit Quiz</title>
   <style>
-    body{font-family:Arial, sans-serif;background:#f5f5f5}
+    body{font-family:Arial, sans-serif;background:#f5f5f5;margin:0}
     .wrap{width:420px;margin:60px auto;background:#fff;padding:20px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
     input{width:100%;padding:8px;margin:6px 0;border:1px solid #ccc;border-radius:4px;box-sizing:border-box}
     button{width:100%;padding:10px;background:#007bff;color:#fff;border:0;border-radius:4px;cursor:pointer}

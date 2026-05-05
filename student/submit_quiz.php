@@ -33,7 +33,9 @@ while ($question = $questions->fetch_assoc()) {
     $selected_option_id = isset($submitted_answers[$question_id]) ? (int)$submitted_answers[$question_id] : null;
 
     $save_stmt->bind_param('iii', $attempt_id, $question_id, $selected_option_id);
-    $save_stmt->execute();
+    if (!$save_stmt->execute()) {
+        die('Answer insert failed: ' . mysqli_error($mysqli));
+    }
 
     if ($selected_option_id) {
         $correct_stmt->bind_param('i', $selected_option_id);

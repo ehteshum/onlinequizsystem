@@ -51,7 +51,6 @@ $result = $mysqli->query($sql);
       <h2 style="margin:0">Available Quizzes</h2>
       <div>
         <a class="btn gray" href="dashboard.php">Back to Dashboard</a>
-        <a class="btn gray" href="../auth/logout.php">Logout</a>
       </div>
     </div>
     <table>

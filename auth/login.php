@@ -2,6 +2,18 @@
 // auth/login.php
 // Simple login page with password verification and session handling
 session_start();
+
+// If the user is already logged in, send them to the correct dashboard immediately.
+if (!empty($_SESSION['user_id']) && !empty($_SESSION['role'])) {
+  if ($_SESSION['role'] === 'teacher') {
+    header('Location: ../teacher/dashboard.php');
+    exit;
+  }
+
+  header('Location: ../student/dashboard.php');
+  exit;
+}
+
 require_once __DIR__ . '/../config/db.php';
 
 $errors = [];
@@ -14,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         // Lookup user by email
-        $stmt = $mysqli->prepare('SELECT id, password, role FROM users WHERE email = ? LIMIT 1');
+        $stmt = $mysqli->prepare('SELECT id, name, password, role FROM users WHERE email = ? LIMIT 1');
         $stmt->bind_param('s', $email);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -24,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Start session and store user id and role
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $user['id'];
+          $_SESSION['user_name'] = $user['name'];
                 $_SESSION['role'] = $user['role'];
 
                 // Redirect based on role
@@ -50,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Login - Quiz System</title>
   <style>
-    body{font-family:Arial, sans-serif;background:#f5f5f5}
+    body{font-family:Arial, sans-serif;background:#f5f5f5;margin:0}
     .wrap{width:320px;margin:60px auto;background:#fff;padding:20px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
     h2{text-align:center;margin:0 0 12px}
     input{width:100%;padding:8px;margin:6px 0;border:1px solid #ccc;border-radius:4px}
@@ -60,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </style>
 </head>
 <body>
+  <?php require_once __DIR__ . '/../includes/navbar.php'; ?>
   <div class="wrap">
     <h2>Login</h2>
     <?php if (!empty($_GET['registered'])): ?>
