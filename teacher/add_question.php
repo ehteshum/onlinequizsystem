@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ostmt->bind_param('isi', $question_id, $text, $is_correct);
                 $ostmt->execute();
             }
-            header('Location: quizzes.php');
+            header('Location: manage_questions.php?quiz_id=' . $quiz_id);
             exit;
         } else {
             $errors[] = 'Database error inserting question.';
@@ -73,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </style>
 </head>
 <body>
+<?php require_once __DIR__ . '/../includes/navbar.php'; ?>
   <div class="wrap">
     <h2>Add Question to: <?=htmlspecialchars($quiz['title'])?></h2>
     <?php if (!empty($errors)): ?>

@@ -72,6 +72,7 @@ $questions = $qstmt->get_result();
   </style>
 </head>
 <body>
+<?php require_once __DIR__ . '/../includes/navbar.php'; ?>
   <div class="wrap">
     <div class="top-actions">
       <h2 style="margin:0"><?=htmlspecialchars($quiz['title'])?></h2>
