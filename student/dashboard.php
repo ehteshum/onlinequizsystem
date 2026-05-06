@@ -37,7 +37,6 @@ if ($_SESSION['role'] !== 'student') {
         <h1 style="margin:0">Welcome Student</h1>
         <p style="margin:6px 0 0">Choose a quiz and start your attempt.</p>
       </div>
-      <a class="btn gray" href="../auth/logout.php">Logout</a>
     </div>
 
     <div class="actions">

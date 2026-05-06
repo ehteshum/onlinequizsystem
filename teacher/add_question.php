@@ -43,15 +43,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $question_id = $qstmt->insert_id;
             // Insert options
             $ostmt = $mysqli->prepare('INSERT INTO options (question_id, option_text, is_correct) VALUES (?, ?, ?)');
+          $optionInsertFailed = false;
             foreach ($options as $index => $text) {
                 $is_correct = ($index === $correct_index) ? 1 : 0;
                 $ostmt->bind_param('isi', $question_id, $text, $is_correct);
-                $ostmt->execute();
+            if (!$ostmt->execute()) {
+              $errors[] = 'Database error inserting option: ' . mysqli_error($mysqli);
+              $optionInsertFailed = true;
+              break;
             }
+            }
+
+          if (!$optionInsertFailed) {
             header('Location: manage_questions.php?quiz_id=' . $quiz_id);
             exit;
+          }
         } else {
-            $errors[] = 'Database error inserting question.';
+          $errors[] = 'Database error inserting question: ' . mysqli_error($mysqli);
         }
     }
 }

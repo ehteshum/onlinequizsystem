@@ -2,6 +2,19 @@
 // auth/register.php
 // Simple user registration page (HTML + CSS + PHP)
 session_start();
+
+// If the user is already logged in, do not show the register form again.
+// Redirect to the dashboard that matches the session role.
+if (!empty($_SESSION['user_id']) && !empty($_SESSION['role'])) {
+  if ($_SESSION['role'] === 'teacher') {
+    header('Location: ../teacher/dashboard.php');
+    exit;
+  }
+
+  header('Location: ../student/dashboard.php');
+  exit;
+}
+
 require_once __DIR__ . '/../config/db.php';
 
 $errors = [];
@@ -34,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($mysqli->errno === 1062) {
                 $errors[] = 'An account with that email already exists.';
             } else {
-                $errors[] = 'Database error. Try again.';
+            $errors[] = 'Database error: ' . mysqli_error($mysqli);
             }
         }
     }
@@ -47,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Register - Quiz System</title>
   <style>
-    body{font-family:Arial, sans-serif;background:#f5f5f5}
+    body{font-family:Arial, sans-serif;background:#f5f5f5;margin:0}
     .wrap{width:320px;margin:60px auto;background:#fff;padding:20px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
     h2{text-align:center;margin:0 0 12px}
     input, select{width:100%;padding:8px;margin:6px 0;border:1px solid #ccc;border-radius:4px}
@@ -57,6 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </style>
 </head>
 <body>
+  <?php require_once __DIR__ . '/../includes/navbar.php'; ?>
   <div class="wrap">
     <h2>Create Account</h2>
     <?php if (!empty($errors)): ?>
