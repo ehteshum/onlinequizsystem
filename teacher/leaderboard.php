@@ -1,21 +1,24 @@
 <?php
 /**
- * student/leaderboard.php
- * Quiz-wise leaderboard display
- * - Displays list of all quizzes with attempts
- * - Shows leaderboard for selected quiz with rank, student name, and score
+ * teacher/leaderboard.php
+ * Quiz-wise leaderboard for teacher
+ * - Shows list of quizzes created by the logged-in teacher
+ * - Displays leaderboard for selected quiz with rank, student name, and score
  * - Ordered by highest score first
  */
 
 session_start();
 
-// Check if user is authenticated and is a student
-if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
+// Check if user is authenticated and is a teacher
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'teacher') {
     header('Location: ../auth/login.php');
     exit;
 }
 
 require_once __DIR__ . '/../config/db.php';
+
+// Get teacher ID from session
+$teacher_id = $_SESSION['user_id'];
 
 // Get selected quiz ID from URL parameter
 $selected_quiz_id = isset($_GET['quiz_id']) ? intval($_GET['quiz_id']) : null;
@@ -24,25 +27,28 @@ $selected_quiz_id = isset($_GET['quiz_id']) ? intval($_GET['quiz_id']) : null;
 $quiz_details = null;
 $leaderboard_data = [];
 
-// Fetch all quizzes that have attempts (for quiz selection)
+// Fetch all quizzes created by this teacher that have attempts
 $quizzes_sql = 'SELECT DISTINCT q.id, q.title 
                 FROM quizzes q
                 INNER JOIN attempts a ON q.id = a.quiz_id
+                WHERE q.created_by = ?
                 ORDER BY q.title ASC';
-$quizzes_result = $mysqli->query($quizzes_sql);
+$quizzes_stmt = $mysqli->prepare($quizzes_sql);
+$quizzes_stmt->bind_param('i', $teacher_id);
+$quizzes_stmt->execute();
+$quizzes_result = $quizzes_stmt->get_result();
 $quizzes = [];
-if ($quizzes_result) {
-    while ($row = $quizzes_result->fetch_assoc()) {
-        $quizzes[] = $row;
-    }
+while ($row = $quizzes_result->fetch_assoc()) {
+    $quizzes[] = $row;
 }
+$quizzes_stmt->close();
 
 // If a quiz is selected, fetch its leaderboard with ranking
 if ($selected_quiz_id) {
-    // Get quiz details
-    $quiz_sql = 'SELECT id, title FROM quizzes WHERE id = ?';
+    // Get quiz details (verify it belongs to this teacher)
+    $quiz_sql = 'SELECT id, title FROM quizzes WHERE id = ? AND created_by = ?';
     $quiz_stmt = $mysqli->prepare($quiz_sql);
-    $quiz_stmt->bind_param('i', $selected_quiz_id);
+    $quiz_stmt->bind_param('ii', $selected_quiz_id, $teacher_id);
     $quiz_stmt->execute();
     $quiz_result = $quiz_stmt->get_result();
     

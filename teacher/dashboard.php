@@ -54,6 +54,7 @@ if ($_SESSION['role'] !== 'teacher') {
     <div class="actions">
       <a class="btn secondary" href="create_quiz.php">Create New Quiz</a>
       <a class="btn" href="quizzes.php">View My Quizzes</a>
+      <a class="btn gray" href="leaderboard.php">View Leaderboard</a>
     </div>
 
     <!-- Overview panel explaining what the teacher can do -->
