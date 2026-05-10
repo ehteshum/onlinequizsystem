@@ -17,8 +17,8 @@ $leaderboardLink = $basePath . '/student/leaderboard.php';
 if ($role === 'teacher') {
     $dashboardLink = $basePath . '/teacher/dashboard.php';
   $quizzesLink = $basePath . '/teacher/quizzes.php';
-  // Fallback: teacher side has no dedicated leaderboard page yet.
-  $leaderboardLink = $basePath . '/teacher/quizzes.php';
+  // Teacher leaderboard page
+  $leaderboardLink = $basePath . '/teacher/leaderboard.php';
 }
 ?>
 
