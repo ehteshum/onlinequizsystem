@@ -48,6 +48,9 @@ $percentage = $total_questions > 0 ? round(($score / $total_questions) * 100, 2)
     <h1><?=htmlspecialchars($attempt['title'])?> Result</h1>
     <p class="score"><?=$score?> / <?=$total_questions?></p>
     <p>Percentage: <strong><?=$percentage?>%</strong></p>
+    <p style="margin-top:12px">
+      <a class="btn" href="result_review.php?attempt_id=<?=$attempt_id?>">View Detailed Review</a>
+    </p>
     <a class="btn" href="quizzes.php">Back to Quizzes</a>
   </div>
 </body>

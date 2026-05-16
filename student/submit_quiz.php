@@ -56,6 +56,6 @@ $update_stmt->execute();
 // Clear attempt info from session so a new quiz can start cleanly
 unset($_SESSION['attempt_id'], $_SESSION['attempt_quiz_id']);
 
-// Redirect to result page
-header('Location: result.php?attempt_id=' . $attempt_id);
+// Redirect to the detailed review page after submission
+header('Location: result_review.php?attempt_id=' . $attempt_id);
 exit;
