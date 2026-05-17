@@ -17,6 +17,28 @@ function require_statement($stmt, $mysqli, $context)
   return $stmt;
 }
 
+function store_answer_for_question($mysqli, $attempt_id, $question_id, $selected_option_id)
+{
+  // Keep one stored answer per question by replacing any previous row.
+  $delete_stmt = require_statement($mysqli->prepare('DELETE FROM answers WHERE attempt_id = ? AND question_id = ?'), $mysqli, 'Delete stored answer');
+  $delete_stmt->bind_param('ii', $attempt_id, $question_id);
+  if (!$delete_stmt->execute()) {
+    die('Could not clear previous answer: ' . $mysqli->error);
+  }
+
+  if ($selected_option_id === null) {
+    $insert_stmt = require_statement($mysqli->prepare('INSERT INTO answers (attempt_id, question_id, selected_option_id) VALUES (?, ?, NULL)'), $mysqli, 'Insert unanswered question');
+    $insert_stmt->bind_param('ii', $attempt_id, $question_id);
+  } else {
+    $insert_stmt = require_statement($mysqli->prepare('INSERT INTO answers (attempt_id, question_id, selected_option_id) VALUES (?, ?, ?)'), $mysqli, 'Insert stored answer');
+    $insert_stmt->bind_param('iii', $attempt_id, $question_id, $selected_option_id);
+  }
+
+  if (!$insert_stmt->execute()) {
+    die('Could not store answer: ' . $mysqli->error);
+  }
+}
+
 $quiz_id = isset($_GET['quiz_id']) ? (int)$_GET['quiz_id'] : 0;
 if ($quiz_id <= 0) {
     die('Invalid quiz id.');
@@ -79,12 +101,95 @@ if (!empty($_SESSION['attempt_id']) && !empty($_SESSION['attempt_quiz_id']) && (
     $remaining_time = 0;
   }
 
-// Fetch questions and options for the quiz
-$questions_sql = 'SELECT id, question_text FROM questions WHERE quiz_id = ? ORDER BY id ASC';
-$qstmt = require_statement($mysqli->prepare($questions_sql), $mysqli, 'Question fetch');
-$qstmt->bind_param('i', $quiz_id);
-$qstmt->execute();
-$questions = $qstmt->get_result();
+// Load the quiz progress for this quiz into the session.
+// The current question index is the source of truth for navigation.
+if (!isset($_SESSION['quiz_progress'])) {
+  $_SESSION['quiz_progress'] = [];
+}
+
+if (!isset($_SESSION['quiz_progress'][$quiz_id])) {
+  $question_ids_stmt = require_statement($mysqli->prepare('SELECT id FROM questions WHERE quiz_id = ? ORDER BY id ASC'), $mysqli, 'Question id fetch');
+  $question_ids_stmt->bind_param('i', $quiz_id);
+  $question_ids_stmt->execute();
+  $question_ids_result = $question_ids_stmt->get_result();
+
+  $question_ids = [];
+  while ($row = $question_ids_result->fetch_assoc()) {
+    $question_ids[] = (int)$row['id'];
+  }
+
+  if (empty($question_ids)) {
+    die('No questions found for this quiz.');
+  }
+
+  $_SESSION['quiz_progress'][$quiz_id] = [
+    'attempt_id' => $attempt_id,
+    'current_index' => 0,
+    'question_ids' => $question_ids,
+    'answers' => []
+  ];
+} else {
+  // Keep the existing attempt linked to the quiz if the session already has it.
+  $_SESSION['quiz_progress'][$quiz_id]['attempt_id'] = $attempt_id;
+}
+
+$progress = &$_SESSION['quiz_progress'][$quiz_id];
+$question_ids = $progress['question_ids'];
+$current_index = (int)($progress['current_index'] ?? 0);
+$total_questions = count($question_ids);
+
+if ($current_index >= $total_questions) {
+  header('Location: submit_quiz.php?quiz_id=' . $quiz_id);
+  exit;
+}
+
+$current_question_id = (int)$question_ids[$current_index];
+
+// Handle navigation first so every click saves the current answer before moving on.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $posted_question_id = (int)($_POST['question_id'] ?? 0);
+  $action = $_POST['action'] ?? 'next';
+
+  // Reject replayed or out-of-order submissions from browser history.
+  if ($posted_question_id !== $current_question_id) {
+    header('Location: start_quiz.php?quiz_id=' . $quiz_id);
+    exit;
+  }
+
+  $selected_option_id = isset($_POST['selected_option_id']) && $_POST['selected_option_id'] !== ''
+    ? (int)$_POST['selected_option_id']
+    : null;
+
+  // Save the answer immediately after clicking Next or Submit.
+  store_answer_for_question($mysqli, $attempt_id, $current_question_id, $selected_option_id);
+  $progress['answers'][$current_question_id] = $selected_option_id;
+
+  if ($action === 'submit' || $current_index >= $total_questions - 1) {
+    // Final question or timer expiration: send the attempt to the submit handler.
+    header('Location: submit_quiz.php?quiz_id=' . $quiz_id);
+    exit;
+  }
+
+  // Move forward only. Going back is intentionally not supported.
+  $progress['current_index'] = $current_index + 1;
+  header('Location: start_quiz.php?quiz_id=' . $quiz_id);
+  exit;
+}
+
+// Load the current question and its options only.
+$question_stmt = require_statement($mysqli->prepare('SELECT id, question_text FROM questions WHERE id = ? AND quiz_id = ? LIMIT 1'), $mysqli, 'Current question fetch');
+$question_stmt->bind_param('ii', $current_question_id, $quiz_id);
+$question_stmt->execute();
+$current_question = $question_stmt->get_result()->fetch_assoc();
+
+if (!$current_question) {
+  die('Question not found.');
+}
+
+$options_stmt = require_statement($mysqli->prepare('SELECT id, option_text FROM options WHERE question_id = ? ORDER BY id ASC'), $mysqli, 'Option fetch');
+$options_stmt->bind_param('i', $current_question_id);
+$options_stmt->execute();
+$options = $options_stmt->get_result();
 ?>
 <!doctype html>
 <html lang="en">
@@ -100,6 +205,7 @@ $questions = $qstmt->get_result();
     .timer{padding:8px 12px;border:1px solid #f0c6c6;border-radius:999px;background:#fff4f4;font-size:15px;font-weight:bold;color:#b00020;white-space:nowrap}
     .question{margin:16px 0;padding:16px;border:1px solid #e8ebef;border-radius:10px;background:#fafbfc}
     .question-title{margin:0 0 12px 0;font-size:18px;line-height:1.4;color:#1f2937}
+    .question-count{margin:0 0 14px 0;color:#6b7280;font-size:14px}
     .option{display:flex;align-items:center;gap:10px;margin:10px 0;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;transition:all .15s ease}
     .option:hover{border-color:#cbd5e1;background:#f8fafc}
     .option input{margin:0;accent-color:#2563eb}
@@ -121,30 +227,31 @@ $questions = $qstmt->get_result();
       </div>
     </div>
 
-    <form method="post" action="submit_quiz.php" id="quizForm">
+    <!-- One-question-at-a-time form. The server decides which question is current. -->
+    <form method="post" action="start_quiz.php?quiz_id=<?=htmlspecialchars($quiz_id)?>" id="quizForm">
       <input type="hidden" name="quiz_id" value="<?=htmlspecialchars($quiz_id)?>">
+      <input type="hidden" name="question_id" value="<?=htmlspecialchars($current_question_id)?>">
+      <input type="hidden" name="action" id="quizAction" value="next">
 
-      <?php $index = 1; while ($question = $questions->fetch_assoc()): ?>
-        <div class="question">
-          <!-- Display each question with its options -->
-          <h3 class="question-title"><?=$index?>. <?=htmlspecialchars($question['question_text'])?></h3>
-          <?php
-            $ostmt = require_statement($mysqli->prepare('SELECT id, option_text FROM options WHERE question_id = ? ORDER BY id ASC'), $mysqli, 'Option fetch');
-            $ostmt->bind_param('i', $question['id']);
-            $ostmt->execute();
-            $options = $ostmt->get_result();
-          ?>
-          <?php while ($option = $options->fetch_assoc()): ?>
-            <label class="option">
-              <input type="radio" name="answers[<?=$question['id']?>]" value="<?=$option['id']?>">
-              <?=htmlspecialchars($option['option_text'])?>
-            </label>
-          <?php endwhile; ?>
-        </div>
-      <?php $index++; endwhile; ?>
+      <div class="question">
+        <!-- Show only the current question for this session step. -->
+        <p class="question-count">Question <?=($current_index + 1)?> of <?=$total_questions?></p>
+        <h3 class="question-title"><?=htmlspecialchars($current_question['question_text'])?></h3>
+
+        <?php while ($option = $options->fetch_assoc()): ?>
+          <label class="option">
+            <input type="radio" name="selected_option_id" value="<?=$option['id']?>">
+            <?=htmlspecialchars($option['option_text'])?>
+          </label>
+        <?php endwhile; ?>
+      </div>
 
       <div class="submit-row">
-        <button type="submit">Submit Quiz</button>
+        <?php if ($current_index >= $total_questions - 1): ?>
+          <button type="submit" onclick="return confirmSubmitQuiz();">Submit Quiz</button>
+        <?php else: ?>
+          <button type="submit" onclick="document.getElementById('quizAction').value='next';">Next</button>
+        <?php endif; ?>
       </div>
     </form>
   </div>
@@ -154,6 +261,33 @@ $questions = $qstmt->get_result();
     let remaining = <?= (int)$remaining_time ?>;
     const timerEl = document.getElementById('timer');
     const form = document.getElementById('quizForm');
+    const actionInput = document.getElementById('quizAction');
+    // Set this only for intentional form submits so refresh/close still warns.
+    let suppressUnloadWarning = false;
+
+    // Ask for confirmation only when the student taps the final Submit button.
+    function confirmSubmitQuiz() {
+      const confirmed = window.confirm('Are you sure you want to submit the quiz now?');
+
+      if (confirmed) {
+        suppressUnloadWarning = true;
+        actionInput.value = 'submit';
+      }
+
+      return confirmed;
+    }
+
+    // Keep only one answer per question in the UI and highlight the selected option.
+    document.querySelectorAll('.option input[type="radio"]').forEach((radio) => {
+      radio.addEventListener('change', () => {
+        document.querySelectorAll('.option').forEach((label) => label.classList.remove('selected'));
+        radio.closest('.option').classList.add('selected');
+      });
+
+      if (radio.checked) {
+        radio.closest('.option').classList.add('selected');
+      }
+    });
 
     function renderTimer() {
       const minutes = Math.floor(remaining / 60);
@@ -167,33 +301,27 @@ $questions = $qstmt->get_result();
       renderTimer();
       if (remaining <= 0) {
         clearInterval(interval);
-        // Auto submit when time ends
+        // Auto submit when time ends. The current answer is saved before final grading.
+        suppressUnloadWarning = true;
+        actionInput.value = 'submit';
         form.submit();
       }
     }, 1000);
 
-    // Basic anti-cheat: warn if user tries to refresh or leave the page.
-    // Limitation: this only discourages leaving; it does not fully prevent cheating.
+    // Mark any intentional quiz submission so the unload warning does not fire.
+    form.addEventListener('submit', () => {
+      suppressUnloadWarning = true;
+    });
+
+    // Warn only for refresh, tab close, or accidental navigation away.
+    // This warning is intentionally disabled for the Next button flow.
     window.onbeforeunload = function () {
+      if (suppressUnloadWarning) {
+        return;
+      }
+
       return 'If you leave this page, your quiz may be submitted or interrupted.';
     };
-
-    // Highlight selected option within each question card
-    document.querySelectorAll('.question').forEach((questionCard) => {
-      const radios = questionCard.querySelectorAll('input[type="radio"]');
-      radios.forEach((radio) => {
-        radio.addEventListener('change', () => {
-          questionCard.querySelectorAll('.option').forEach((label) => label.classList.remove('selected'));
-          if (radio.checked) {
-            radio.closest('.option').classList.add('selected');
-          }
-        });
-
-        if (radio.checked) {
-          radio.closest('.option').classList.add('selected');
-        }
-      });
-    });
   </script>
 </body>
 </html>
