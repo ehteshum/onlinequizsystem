@@ -48,26 +48,25 @@ $total_questions = (int)($count_stmt->get_result()->fetch_assoc()['total_questio
 $score = (int)$attempt['score'];
 $percentage = $total_questions > 0 ? round(($score / $total_questions) * 100, 2) : 0;
 
-// Fetch question review data using answers and options tables
-// - answers table gives the student's selected option
-// - options table gives both selected answer text and correct answer text
+// Fetch question review data using answers and options tables.
+// Questions are the base list so unanswered questions still appear in the review.
 $review_stmt = $mysqli->prepare(
-    'SELECT 
-        q.question_text,
-        sel.option_text AS selected_answer,
-        correct.option_text AS correct_answer,
-        CASE 
-            WHEN sel.id = correct.id THEN 1 
-            ELSE 0 
-        END AS is_correct
-     FROM answers ans
-     JOIN questions q ON ans.question_id = q.id
-     LEFT JOIN options sel ON ans.selected_option_id = sel.id
-     LEFT JOIN options correct ON correct.question_id = q.id AND correct.is_correct = 1
-     WHERE ans.attempt_id = ?
-     ORDER BY q.id ASC'
+  'SELECT 
+    q.question_text,
+    sel.option_text AS selected_answer,
+    correct.option_text AS correct_answer,
+    CASE 
+      WHEN sel.id IS NOT NULL AND sel.id = correct.id THEN 1 
+      ELSE 0 
+    END AS is_correct
+   FROM questions q
+   LEFT JOIN answers ans ON ans.question_id = q.id AND ans.attempt_id = ?
+   LEFT JOIN options sel ON ans.selected_option_id = sel.id
+   LEFT JOIN options correct ON correct.question_id = q.id AND correct.is_correct = 1
+   WHERE q.quiz_id = ?
+   ORDER BY q.id ASC'
 );
-$review_stmt->bind_param('i', $attempt_id);
+$review_stmt->bind_param('ii', $attempt_id, $attempt['quiz_id']);
 $review_stmt->execute();
 $review_result = $review_stmt->get_result();
 
